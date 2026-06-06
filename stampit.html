@@ -1,0 +1,1366 @@
+<!--
+  STAMPit — Standalone Offline Transcription Tool
+  Built by Rej
+  MIT License
+  v1.0 — Slices 3+5+6: Slash commands, Find & Replace, Auto-save
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STAMPit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0e0e0f;--bg-surface:#161618;--bg-player:#111113;
+  --border:rgba(255,255,255,0.07);--border-md:rgba(255,255,255,0.12);
+  --text-primary:#f0efe9;--text-secondary:#6b6b72;--text-muted:#3a3a40;
+  --accent:#5b8ef0;--accent-dim:rgba(91,142,240,0.12);
+  --annotation:#9d7fe8;--speaker:#e89a4a;
+  --font-logo:'Syne',sans-serif;--font-editor:'IBM Plex Mono',monospace;
+  --sidebar-w:280px;--player-h:52px;--header-h:44px;
+}
+[data-theme="light"] {
+  --bg:#f7f6f2;--bg-surface:#ffffff;--bg-player:#f0efe9;
+  --border:rgba(0,0,0,0.07);--border-md:rgba(0,0,0,0.12);
+  --text-primary:#18181b;--text-secondary:#71717a;--text-muted:#c4c4cc;
+  --accent:#2563eb;--accent-dim:rgba(37,99,235,0.08);
+  --annotation:#7c3aed;--speaker:#b45309;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font-editor);background:var(--bg);color:var(--text-primary);display:flex;flex-direction:column;height:100vh;transition:background .2s,color .2s}
+
+/* header */
+#header{height:var(--header-h);display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:.5px solid var(--border);background:var(--bg);flex-shrink:0;z-index:10}
+#logo{font-family:var(--font-logo);font-weight:800;font-size:17px;letter-spacing:-.03em;color:var(--text-primary);display:flex;align-items:center;gap:7px;user-select:none}
+#logo-stamp{color:var(--accent)}
+#logo-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);margin-bottom:1px}
+#header-right{display:flex;align-items:center;gap:4px}
+.icon-btn{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;border-radius:6px;transition:background .1s,color .1s;padding:0}
+.icon-btn:hover{background:var(--border);color:var(--text-primary)}
+.icon-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* find & replace bar */
+#fnr-bar{display:none;flex-shrink:0;border-bottom:.5px solid var(--border);background:var(--bg-surface);padding:8px 16px;gap:8px;align-items:center;flex-wrap:wrap}
+#fnr-bar.open{display:flex}
+#fnr-bar input{font-family:var(--font-editor);font-size:12px;background:var(--bg);color:var(--text-primary);border:.5px solid var(--border-md);border-radius:5px;padding:5px 10px;outline:none;width:160px}
+#fnr-bar input:focus{border-color:var(--accent)}
+#fnr-bar input::placeholder{color:var(--text-muted)}
+.fnr-btn{font-family:var(--font-editor);font-size:12px;color:var(--text-secondary);background:transparent;border:.5px solid var(--border-md);border-radius:5px;padding:5px 10px;cursor:pointer;white-space:nowrap;transition:background .1s,color .1s}
+.fnr-btn:hover{background:var(--accent-dim);color:var(--text-primary)}
+#fnr-status{font-size:11px;color:var(--text-muted);font-family:var(--font-editor);min-width:60px}
+#fnr-close{margin-left:auto}
+
+/* main / editor */
+#main{flex:1;overflow:hidden;position:relative;display:flex}
+#editor-wrap{flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border-md) transparent}
+#editor-wrap::-webkit-scrollbar{width:4px}
+#editor-wrap::-webkit-scrollbar-thumb{background:var(--border-md);border-radius:2px}
+#editor{min-height:100%;padding:32px 48px;font-family:var(--font-editor);font-size:14px;line-height:2;color:var(--text-primary);outline:none;white-space:pre-wrap;word-break:break-word;caret-color:var(--accent);max-width:860px;margin:0 auto}
+#editor:empty::before{content:attr(data-placeholder);color:var(--text-muted);pointer-events:none}
+
+/* timestamp spans */
+.ts{display:inline;font-family:var(--font-editor);font-size:13px;color:var(--accent);cursor:pointer;border-radius:3px;padding:0 1px;text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--accent) 40%,transparent);text-underline-offset:2px;outline:none;white-space:nowrap;transition:background .1s}
+.ts:hover{background:var(--accent-dim)}
+.ts[contenteditable="true"]{background:var(--accent-dim);outline:1.5px solid var(--accent);border-radius:3px;cursor:text;text-decoration:none;caret-color:var(--accent)}
+.ts.error[contenteditable="true"]{background:rgba(239,68,68,.08);outline:1.5px solid #ef4444;color:#f87171}
+
+/* slash command palette */
+#slash-palette{position:fixed;background:var(--bg-surface);border:.5px solid var(--border-md);border-radius:8px;padding:4px;min-width:200px;z-index:100;box-shadow:0 8px 24px rgba(0,0,0,.3);display:none}
+#slash-palette.open{display:block}
+.sp-item{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:5px;cursor:pointer;gap:12px;transition:background .1s}
+.sp-item:hover,.sp-item.active{background:var(--accent-dim)}
+.sp-tag{font-family:var(--font-editor);font-size:12px;color:var(--annotation)}
+.sp-tag.spk{color:var(--speaker)}
+.sp-key{font-size:10px;color:var(--text-muted);font-family:var(--font-editor)}
+
+/* player */
+#player{height:var(--player-h);display:flex;align-items:center;gap:14px;padding:0 20px;border-top:.5px solid var(--border);background:var(--bg-player);flex-shrink:0;transition:background .2s}
+#play-btn{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:.5px solid var(--border-md);background:transparent;color:var(--text-primary);cursor:pointer;border-radius:6px;flex-shrink:0;transition:background .1s;padding:0}
+#play-btn:hover{background:var(--border)}
+#play-btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#file-label{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-secondary);cursor:pointer;border:.5px dashed var(--border-md);border-radius:5px;padding:5px 10px;transition:border-color .15s,color .15s;white-space:nowrap;font-family:var(--font-editor)}
+#file-label:hover{border-color:var(--accent);color:var(--accent)}
+#file-label svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+#file-input{display:none}
+#file-name{font-size:12px;color:var(--text-secondary);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-family:var(--font-editor)}
+#player-right{display:flex;align-items:center;gap:12px;margin-left:auto;flex-shrink:0}
+#time-readout{font-size:12px;color:var(--text-secondary);font-family:var(--font-editor);white-space:nowrap}
+#ts-display{font-family:var(--font-editor);font-size:13px;font-weight:500;color:var(--accent);letter-spacing:.04em;min-width:108px;text-align:right}
+#speed-btn{font-family:var(--font-editor);font-size:12px;color:var(--text-secondary);background:transparent;border:.5px solid var(--border-md);border-radius:5px;padding:4px 8px;cursor:pointer;transition:color .1s}
+#speed-btn:hover{color:var(--text-primary)}
+
+/* sidebar */
+#sidebar{position:absolute;top:0;right:0;bottom:0;width:var(--sidebar-w);background:var(--bg-surface);border-left:.5px solid var(--border);transform:translateX(100%);transition:transform .18s cubic-bezier(.4,0,.2,1);z-index:20;display:flex;flex-direction:column;overflow:hidden}
+#sidebar.open{transform:translateX(0)}
+#sidebar-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:.5px solid var(--border);flex-shrink:0}
+#sidebar-title{font-family:var(--font-logo);font-weight:700;font-size:13px;letter-spacing:.06em;color:var(--text-secondary);text-transform:uppercase}
+#sidebar-body{flex:1;overflow-y:auto;padding:8px 0;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.ss{padding:12px 18px 6px}
+.sl{font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px}
+.si{display:flex;align-items:center;justify-content:space-between;padding:7px 0;font-size:13px;color:var(--text-secondary);border-bottom:.5px solid var(--border);gap:8px}
+.si:last-child{border-bottom:none}
+.si-l{flex:1}
+.sk{font-size:10px;background:var(--border);border-radius:4px;padding:2px 6px;color:var(--text-secondary);letter-spacing:.03em;white-space:nowrap;font-family:var(--font-editor)}
+.sb{width:100%;display:flex;align-items:center;gap:9px;padding:9px 18px;font-family:var(--font-editor);font-size:13px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;text-align:left;transition:background .1s,color .1s}
+.sb:hover{background:var(--accent-dim);color:var(--text-primary)}
+.sb svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.sd{height:.5px;background:var(--border);margin:4px 0}
+#sidebar-footer{padding:14px 18px;border-top:.5px solid var(--border);flex-shrink:0}
+#sidebar-credit{font-size:11px;color:var(--text-muted);line-height:1.7;font-family:var(--font-editor)}
+#sidebar-credit span{color:var(--text-secondary)}
+.tr{display:flex;align-items:center;justify-content:space-between;padding:9px 18px;font-size:13px;color:var(--text-secondary)}
+.tg{width:32px;height:18px;background:var(--border-md);border-radius:9px;position:relative;cursor:pointer;transition:background .2s;border:none;flex-shrink:0}
+.tg.on{background:var(--accent)}
+.tg::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .18s}
+.tg.on::after{transform:translateX(14px)}
+#overlay{display:none;position:absolute;inset:0;z-index:15}
+#overlay.visible{display:block}
+
+/* autosave indicator */
+#autosave-dot{width:5px;height:5px;border-radius:50%;background:var(--text-muted);transition:background .3s;flex-shrink:0}
+#autosave-dot.saved{background:#4ade80}
+
+.flash{animation:ts-flash .2s ease-out}
+@keyframes ts-flash{0%{opacity:1}40%{opacity:.3}100%{opacity:1}}
+
+/* waveform scrubber */
+#waveform-bar{height:40px;flex-shrink:0;background:var(--bg-player);border-top:.5px solid var(--border);position:relative;cursor:pointer;overflow:hidden;transition:background .2s}
+#waveform-bar.empty{cursor:default}
+#waveform-canvas{display:block;width:100%;height:100%}
+#waveform-loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:11px;font-family:var(--font-editor);color:var(--text-muted);letter-spacing:.06em}
+#waveform-loading.visible{display:flex}
+
+/* session modal */
+#modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center}
+#modal-overlay.open{display:flex}
+#modal{background:var(--bg-surface);border:.5px solid var(--border-md);border-radius:10px;padding:0;width:360px;max-width:92vw;overflow:hidden;max-height:80vh;display:flex;flex-direction:column}
+#modal-header{padding:16px 20px 12px;border-bottom:.5px solid var(--border)}
+#modal-title{font-family:var(--font-logo);font-weight:700;font-size:14px;color:var(--text-primary);margin-bottom:3px}
+#modal-sub{font-size:11px;color:var(--text-muted);font-family:var(--font-editor)}
+#modal-list{flex:1;overflow-y:auto;padding:6px 0;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.session-item{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;cursor:pointer;transition:background .1s;gap:8px}
+.session-item:hover{background:var(--accent-dim)}
+.session-item.new-session{border-top:.5px solid var(--border);margin-top:4px}
+.session-date{font-size:13px;color:var(--text-primary);font-family:var(--font-editor)}
+.session-meta{font-size:11px;color:var(--text-muted);font-family:var(--font-editor);margin-top:2px}
+.session-del{width:22px;height:22px;display:flex;align-items:center;justify-content:center;border:none;background:transparent;color:var(--text-muted);cursor:pointer;border-radius:4px;flex-shrink:0;padding:0;transition:color .1s,background .1s}
+.session-del:hover{color:#f87171;background:rgba(248,113,113,.1)}
+.session-del svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#modal-footer{padding:10px 20px;border-top:.5px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+.modal-btn{font-family:var(--font-editor);font-size:12px;padding:6px 14px;border-radius:5px;cursor:pointer;border:.5px solid var(--border-md);background:transparent;color:var(--text-secondary);transition:background .1s,color .1s}
+.modal-btn:hover{background:var(--accent-dim);color:var(--text-primary)}
+.modal-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.modal-btn.primary:hover{opacity:.9}
+</style>
+</head>
+<body data-theme="dark">
+
+<header id="header">
+  <div id="logo"><span id="logo-stamp">STAMP</span><span>it</span><div id="logo-dot"></div></div>
+  <div id="header-right">
+    <div id="autosave-dot" title="auto-save status"></div>
+    <button class="icon-btn" id="theme-btn" aria-label="toggle theme">
+      <svg id="ico-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg id="ico-moon" viewBox="0 0 24 24" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+    <button class="icon-btn" id="sidebar-btn" aria-label="open menu">
+      <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- find & replace bar -->
+<div id="fnr-bar">
+  <input id="fnr-find" placeholder="find..." spellcheck="false">
+  <input id="fnr-replace" placeholder="replace with..." spellcheck="false">
+  <button class="fnr-btn" id="fnr-prev">&#8593; prev</button>
+  <button class="fnr-btn" id="fnr-next">&#8595; next</button>
+  <button class="fnr-btn" id="fnr-replace-one">replace</button>
+  <button class="fnr-btn" id="fnr-replace-all">replace all</button>
+  <span id="fnr-status"></span>
+  <button class="icon-btn fnr-close" id="fnr-close" aria-label="close find & replace">
+    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
+</div>
+
+<main id="main">
+  <div id="editor-wrap">
+    <div id="editor" contenteditable="true" spellcheck="false"
+      data-placeholder="start typing your transcript..."></div>
+  </div>
+  <div id="overlay"></div>
+  <aside id="sidebar">
+    <div id="sidebar-header">
+      <span id="sidebar-title">Menu</span>
+      <button class="icon-btn" id="sidebar-close" aria-label="close">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="sidebar-body">
+      <div class="ss"><div class="sl">Shortcuts</div>
+        <div class="si"><span class="si-l">Play / pause</span><span class="sk">tab</span></div>
+        <div class="si"><span class="si-l">Insert timestamp</span><span class="sk">ctrl+space</span></div>
+        <div class="si"><span class="si-l">Rewind 3s</span><span class="sk">ctrl+−</span></div>
+        <div class="si"><span class="si-l">EN tag</span><span class="sk">`phrase`</span></div>
+        <div class="si"><span class="si-l">Annotations</span><span class="sk">/l /c /u</span></div>
+        <div class="si"><span class="si-l">Speaker tags</span><span class="sk">/1 /2</span></div>
+        <div class="si"><span class="si-l">Find &amp; replace</span><span class="sk">ctrl+h</span></div>
+      </div>
+      <div class="sd"></div>
+      <button class="sb" id="export-btn">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export transcript
+      </button>
+      <button class="sb" id="open-sessions-btn">
+        <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        Open sessions
+      </button>
+      <button class="sb" id="new-session-btn">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New session
+      </button>
+      <button class="sb" id="connect-fs-btn" style="display:none">
+        <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+        Connect folder
+      </button>
+      <button class="sb" id="fnr-open-btn">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Find &amp; replace
+      </button>
+      <div class="sd"></div>
+      <div class="tr"><span>Dark mode</span><button class="tg on" id="dark-toggle"></button></div>
+      <div class="tr"><span>Auto-save</span><button class="tg on" id="autosave-toggle"></button></div>
+      <div class="sd"></div>
+      <div class="ss"><div class="sl">Timestamp Format</div>
+        <div class="si">
+          <span class="si-l">Mode</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span id="fmt-label" style="font-size:11px;color:var(--accent);font-family:var(--font-editor)">.FF</span>
+            <button class="tg on" id="fmt-toggle"></button>
+            <span style="font-size:11px;color:var(--text-muted);font-family:var(--font-editor)">.mm</span>
+          </div>
+        </div>
+        <div class="si" style="border-bottom:none"><span id="fmt-hint" style="font-size:11px;color:var(--text-muted)">30fps frames · .00–.29</span></div>
+      </div>
+      <div class="sd"></div>
+      <div class="ss"><div class="sl">Stats</div>
+        <div class="si"><span class="si-l">Words</span><span id="word-count" style="font-size:13px;color:var(--text-primary)">0</span></div>
+        <div class="si"><span class="si-l">Lines</span><span id="line-count" style="font-size:13px;color:var(--text-primary)">0</span></div>
+      </div>
+      <div class="sd"></div>
+      <div class="ss" id="annotations-section"><div class="sl">Annotations</div>
+        <div class="si"><span class="si-l" style="color:var(--annotation)">[laughter]</span><span class="sk">/l</span></div>
+        <div class="si"><span class="si-l" style="color:var(--annotation)">[cough]</span><span class="sk">/c</span></div>
+        <div class="si"><span class="si-l" style="color:var(--annotation)">[unintelligible]</span><span class="sk">/u</span></div>
+      </div>
+      <div class="sd"></div>
+      <div class="ss"><div class="sl">Speakers</div>
+        <div class="si"><span class="si-l" style="color:var(--speaker)">[SPK1]</span><span class="sk">/1</span></div>
+        <div class="si"><span class="si-l" style="color:var(--speaker)">[SPK2]</span><span class="sk">/2</span></div>
+      </div>
+    </div>
+    <footer id="sidebar-footer">
+      <div id="sidebar-credit">STAMPit v1.0 &mdash; <span>by Rej</span><br>Free to use &middot; Open source</div>
+      <div id="fs-status" style="font-size:10px;color:var(--text-muted);font-family:var(--font-editor);margin-top:6px">saving to browser</div>
+    </footer>
+  </aside>
+</main>
+
+<div id="waveform-bar" class="empty">
+  <canvas id="waveform-canvas"></canvas>
+  <div id="waveform-loading">decoding audio...</div>
+</div>
+
+<footer id="player">
+  <button id="play-btn" aria-label="play/pause">
+    <svg id="play-icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <label id="file-label" for="file-input">
+    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    load audio
+  </label>
+  <input type="file" id="file-input" accept="audio/*">
+  <span id="file-name">no file loaded</span>
+  <div id="player-right">
+    <span id="time-readout" style="font-size:12px;color:var(--text-secondary);font-family:var(--font-editor);white-space:nowrap">0:00 / 0:00</span>
+    <span id="ts-display">00:00:00.00</span>
+    <button id="speed-btn">1.0×</button>
+  </div>
+</footer>
+
+<!-- slash command palette -->
+<div id="slash-palette">
+  <div class="sp-item" data-tag="[laughter]"><span class="sp-tag">[laughter]</span><span class="sp-key">/l</span></div>
+  <div class="sp-item" data-tag="[cough]"><span class="sp-tag">[cough]</span><span class="sp-key">/c</span></div>
+  <div class="sp-item" data-tag="[unintelligible]"><span class="sp-tag">[unintelligible]</span><span class="sp-key">/u</span></div>
+  <div class="sp-item" data-tag="[SPK1]"><span class="sp-tag spk">[SPK1]</span><span class="sp-key">/1</span></div>
+  <div class="sp-item" data-tag="[SPK2]"><span class="sp-tag spk">[SPK2]</span><span class="sp-key">/2</span></div>
+</div>
+
+<audio id="player-audio"></audio>
+
+<!-- session modal -->
+<div id="modal-overlay">
+  <div id="modal">
+    <div id="modal-header">
+      <div id="modal-title">Sessions</div>
+      <div id="modal-sub"></div>
+    </div>
+    <div id="modal-list"></div>
+    <div id="modal-footer">
+      <button class="modal-btn" id="modal-cancel">cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── elements ──────────────────────────────────────────────────────────────────
+const audio        = document.getElementById('player-audio');
+const editor       = document.getElementById('editor');
+const fileInput    = document.getElementById('file-input');
+const fileNameEl   = document.getElementById('file-name');
+const playBtn      = document.getElementById('play-btn');
+const playIcon     = document.getElementById('play-icon');
+const tsDisplay    = document.getElementById('ts-display');
+const timeReadout  = document.getElementById('time-readout');
+const speedBtn     = document.getElementById('speed-btn');
+const sidebarEl    = document.getElementById('sidebar');
+const overlay      = document.getElementById('overlay');
+const wordCountEl  = document.getElementById('word-count');
+const lineCountEl  = document.getElementById('line-count');
+const fmtToggle    = document.getElementById('fmt-toggle');
+const fmtLabel     = document.getElementById('fmt-label');
+const fmtHint      = document.getElementById('fmt-hint');
+const darkToggle   = document.getElementById('dark-toggle');
+const exportBtn    = document.getElementById('export-btn');
+const autosaveDot  = document.getElementById('autosave-dot');
+const autosaveTgl  = document.getElementById('autosave-toggle');
+const slashPalette = document.getElementById('slash-palette');
+const fnrBar       = document.getElementById('fnr-bar');
+const fnrFind      = document.getElementById('fnr-find');
+const fnrReplace   = document.getElementById('fnr-replace');
+const fnrStatus    = document.getElementById('fnr-status');
+
+// ── state ─────────────────────────────────────────────────────────────────────
+let useFrames      = true;
+let speedIdx       = 2;
+const SPEEDS       = [0.5, 0.75, 1.0, 1.25, 1.5];
+let isDark         = true;
+let rafId          = null;
+let activeTs       = null;
+let autosaveOn     = true;
+let autosaveTimer  = null;
+let isDirty        = false;
+let currentSession = null;   // { id, audioName, label, savedAt }
+let stampitDir     = null;   // FileSystemDirectoryHandle
+const LS_DIR_KEY   = 'stampit_fs_available';
+const SESSIONS_KEY = 'stampit_sessions';
+const MAX_SESSIONS = 5;
+const FS_SUPPORTED = ('showDirectoryPicker' in window);
+
+// slash machine
+const sl = { active:false, buffer:'', caretRect:null };
+
+// EN tag machine
+const en = { active:false, buffer:'', justConverted:false, revertPhrase:'', revertCaretEnd:0 };
+
+// slash command map
+const SLASH_MAP = {
+  'l':'[laughter]', 'c':'[cough]', 'u':'[unintelligible]',
+  '1':'[SPK1]', '2':'[SPK2]'
+};
+
+// ── time format ───────────────────────────────────────────────────────────────
+function formatTime(secs) {
+  const s  = isFinite(secs) ? secs : 0;
+  const hh = String(Math.floor(s / 3600)).padStart(2,'0');
+  const mm = String(Math.floor((s % 3600) / 60)).padStart(2,'0');
+  const ss = String(Math.floor(s % 60)).padStart(2,'0');
+  const sub = useFrames
+    ? String(Math.min(Math.floor((s % 1) * 30), 29)).padStart(2,'0')
+    : String(Math.min(Math.floor((s % 1) * 100), 99)).padStart(2,'0');
+  return '[' + hh + ':' + mm + ':' + ss + '.' + sub + ']';
+}
+function parseTime(str) {
+  const m = str.match(/^\[(\d{2}):(\d{2}):(\d{2})\.(\d{2})\]$/);
+  if (!m) return null;
+  const sub  = parseInt(m[4]);
+  const base = parseInt(m[1])*3600 + parseInt(m[2])*60 + parseInt(m[3]);
+  return useFrames ? (sub >= 30 ? null : base + sub/30) : (sub >= 100 ? null : base + sub/100);
+}
+function fmtHuman(s) {
+  if (!isFinite(s) || s < 0) return '0:00';
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.floor(s%60);
+  return h > 0 ? h+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0') : m+':'+String(sec).padStart(2,'0');
+}
+
+// ── display ───────────────────────────────────────────────────────────────────
+function updateDisplay() {
+  tsDisplay.textContent   = formatTime(audio.currentTime);
+  timeReadout.textContent = fmtHuman(audio.currentTime) + ' / ' + fmtHuman(audio.duration);
+  drawPlayhead();
+}
+function rafLoop() { updateDisplay(); rafId = requestAnimationFrame(rafLoop); }
+function startRaf() { if (!rafId) rafId = requestAnimationFrame(rafLoop); }
+function stopRaf()  { if (rafId) { cancelAnimationFrame(rafId); rafId=null; } updateDisplay(); }
+
+// ── audio ─────────────────────────────────────────────────────────────────────
+audio.addEventListener('play', () => {
+  playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none"/>';
+  startRaf();
+});
+audio.addEventListener('pause', () => {
+  playIcon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"/>';
+  stopRaf();
+});
+audio.addEventListener('ended', stopRaf);
+audio.addEventListener('loadedmetadata', updateDisplay);
+audio.addEventListener('durationchange', updateDisplay);
+
+function togglePlay() { audio.paused ? audio.play() : audio.pause(); }
+function rewind()     { audio.currentTime = Math.max(0, audio.currentTime - 3); }
+
+playBtn.addEventListener('click', () => { togglePlay(); editor.focus(); });
+
+fileInput.addEventListener('change', async function() {
+  const file = this.files[0];
+  if (!file) return;
+  // unsaved changes guard
+  if (isDirty && editor.innerText.trim().length > 0) {
+    if (!confirm('You have unsaved changes. Load new audio anyway?')) return;
+  }
+  audio.src = URL.createObjectURL(file);
+  fileNameEl.textContent = file.name;
+  updateDisplay();
+  // decode waveform
+  decodeWaveform(file);
+  // check for saved sessions
+  const sessions = await getSessionsForAudio(file.name);
+  if (!sessions.length) {
+    currentSession = null; editor.innerHTML = ''; isDirty = false; updateStats(); return;
+  }
+  await showSessionsForAudio(
+    file.name,
+    () => { currentSession = null; editor.innerHTML = ''; isDirty = false; updateStats(); closeModal(); editor.focus(); }
+  );
+});
+
+// ── waveform engine ───────────────────────────────────────────────────────────
+const waveBar    = document.getElementById('waveform-bar');
+const waveCanvas = document.getElementById('waveform-canvas');
+const waveLoading= document.getElementById('waveform-loading');
+const waveCtx    = waveCanvas.getContext('2d');
+let   wavePeaks  = null;   // Float32Array of downsampled peak values 0..1
+let   waveAcx    = null;   // AudioContext (created once)
+
+function getAccentColor() {
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue('--accent').trim() || '#5b8ef0';
+}
+function getMutedColor() {
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue('--text-muted').trim() || '#3a3a40';
+}
+function getAccentDimColor() {
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue('--accent-dim').trim() || 'rgba(91,142,240,0.12)';
+}
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const w   = waveBar.clientWidth;
+  const h   = waveBar.clientHeight;
+  waveCanvas.width  = w * dpr;
+  waveCanvas.height = h * dpr;
+  waveCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (wavePeaks) { drawWaveform(); drawPlayhead(); }
+}
+
+function drawWaveform() {
+  if (!wavePeaks) return;
+  const w = waveBar.clientWidth;
+  const h = waveBar.clientHeight;
+  const mid = h / 2;
+  const dur = audio.duration || 1;
+  const prog = isFinite(audio.currentTime) ? audio.currentTime / dur : 0;
+  const playX = prog * w;
+
+  waveCtx.clearRect(0, 0, w, h);
+
+  const barW  = Math.max(1, w / wavePeaks.length);
+  const gap   = barW > 3 ? 1 : 0;
+
+  for (let i = 0; i < wavePeaks.length; i++) {
+    const x    = i * barW;
+    const amp  = wavePeaks[i] * (mid * 0.85);
+    const isPlayed = x < playX;
+
+    // played portion: accent dim fill
+    waveCtx.fillStyle = isPlayed ? getAccentDimColor() : getMutedColor();
+    waveCtx.globalAlpha = isPlayed ? 1 : 0.5;
+    waveCtx.fillRect(x, mid - amp, barW - gap, amp * 2);
+  }
+  waveCtx.globalAlpha = 1;
+}
+
+function drawPlayhead() {
+  if (!wavePeaks) return;
+  const w    = waveBar.clientWidth;
+  const h    = waveBar.clientHeight;
+  const dur  = audio.duration || 1;
+  const prog = isFinite(audio.currentTime) ? audio.currentTime / dur : 0;
+  const x    = prog * w;
+
+  // redraw waveform first (clears old playhead)
+  drawWaveform();
+
+  // playhead line
+  waveCtx.beginPath();
+  waveCtx.strokeStyle = getAccentColor();
+  waveCtx.lineWidth   = 1.5;
+  waveCtx.moveTo(x, 0);
+  waveCtx.lineTo(x, h);
+  waveCtx.stroke();
+
+  // playhead handle dot at top
+  waveCtx.beginPath();
+  waveCtx.fillStyle = getAccentColor();
+  waveCtx.arc(x, 4, 3.5, 0, Math.PI * 2);
+  waveCtx.fill();
+}
+
+async function decodeWaveform(file) {
+  wavePeaks = null;
+  waveBar.classList.add('empty');
+  waveLoading.classList.add('visible');
+  try {
+    if (!waveAcx) waveAcx = new AudioContext();
+    const buf    = await file.arrayBuffer();
+    const decoded= await waveAcx.decodeAudioData(buf);
+    // mix down all channels to mono
+    const numCh  = decoded.numberOfChannels;
+    const len    = decoded.length;
+    const mono   = new Float32Array(len);
+    for (let c = 0; c < numCh; c++) {
+      const ch = decoded.getChannelData(c);
+      for (let i = 0; i < len; i++) mono[i] += ch[i] / numCh;
+    }
+    // downsample to canvas width in px
+    resizeCanvas();
+    const samples = waveBar.clientWidth;
+    const blockSz = Math.floor(len / samples);
+    const peaks   = new Float32Array(samples);
+    for (let i = 0; i < samples; i++) {
+      let max = 0;
+      const start = i * blockSz;
+      for (let j = 0; j < blockSz; j++) {
+        const v = Math.abs(mono[start + j] || 0);
+        if (v > max) max = v;
+      }
+      peaks[i] = max;
+    }
+    // normalize
+    const globalMax = peaks.reduce((a,b) => Math.max(a,b), 0);
+    if (globalMax > 0) for (let i = 0; i < peaks.length; i++) peaks[i] /= globalMax;
+    wavePeaks = peaks;
+    waveBar.classList.remove('empty');
+    waveLoading.classList.remove('visible');
+    drawWaveform();
+    drawPlayhead();
+  } catch(e) {
+    waveLoading.classList.remove('visible');
+  }
+}
+
+// seek on click/drag
+let waveScrubbbing = false;
+function seekFromPointer(e) {
+  if (!wavePeaks) return;
+  const rect = waveBar.getBoundingClientRect();
+  const x    = (e.clientX - rect.left) / rect.width;
+  audio.currentTime = Math.max(0, Math.min(1, x)) * (audio.duration || 0);
+  drawPlayhead();
+}
+waveBar.addEventListener('mousedown', e => { if (!wavePeaks) return; waveScrubbbing=true; seekFromPointer(e); });
+window.addEventListener('mousemove', e => { if (waveScrubbbing) seekFromPointer(e); });
+window.addEventListener('mouseup',   () => { waveScrubbbing = false; });
+
+// touch support
+waveBar.addEventListener('touchstart', e => { if (!wavePeaks) return; seekFromPointer(e.touches[0]); }, {passive:true});
+waveBar.addEventListener('touchmove',  e => { if (!wavePeaks) return; seekFromPointer(e.touches[0]); }, {passive:true});
+
+// resize observer
+new ResizeObserver(() => { resizeCanvas(); }).observe(waveBar);
+
+speedBtn.addEventListener('click', () => {
+  speedIdx = (speedIdx + 1) % SPEEDS.length;
+  audio.playbackRate = SPEEDS[speedIdx];
+  speedBtn.textContent = (SPEEDS[speedIdx] % 1 === 0 ? SPEEDS[speedIdx]+'.0' : SPEEDS[speedIdx]) + '×';
+});
+
+// ── sidebar ───────────────────────────────────────────────────────────────────
+function openSidebar()  { sidebarEl.classList.add('open');    overlay.classList.add('visible'); }
+function closeSidebar() { sidebarEl.classList.remove('open'); overlay.classList.remove('visible'); }
+document.getElementById('sidebar-btn').addEventListener('click', openSidebar);
+document.getElementById('sidebar-close').addEventListener('click', closeSidebar);
+overlay.addEventListener('click', closeSidebar);
+
+// ── theme ─────────────────────────────────────────────────────────────────────
+function setTheme(dark) {
+  isDark = dark;
+  document.body.setAttribute('data-theme', dark ? 'dark' : 'light');
+  document.getElementById('ico-sun').style.display  = dark ? '' : 'none';
+  document.getElementById('ico-moon').style.display = dark ? 'none' : '';
+  darkToggle.classList.toggle('on', dark);
+}
+document.getElementById('theme-btn').addEventListener('click', () => setTheme(!isDark));
+darkToggle.addEventListener('click', () => setTheme(!isDark));
+
+// ── format toggle ─────────────────────────────────────────────────────────────
+fmtToggle.addEventListener('click', () => {
+  useFrames = !useFrames;
+  fmtToggle.classList.toggle('on', useFrames);
+  fmtLabel.textContent = useFrames ? '.FF' : '.mm';
+  fmtLabel.style.color = useFrames ? 'var(--accent)' : 'var(--text-muted)';
+  fmtHint.textContent  = useFrames ? '30fps frames · .00–.29' : 'centiseconds · .00–.99';
+  updateDisplay();
+});
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) + ' · ' +
+         d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+}
+function audioBaseName(name) { return name.replace(/\.[^.]+$/,''); }
+function sessionFileName(session) { return session.id + '.json'; }
+function wordCount(html) {
+  return html ? html.replace(/<[^>]+>/g,'').trim().split(/\s+/).filter(Boolean).length : 0;
+}
+
+// ── FS API: request directory once ───────────────────────────────────────────
+async function requestDir() {
+  try {
+    stampitDir = await window.showDirectoryPicker({ id:'stampit', mode:'readwrite', startIn:'documents' });
+    localStorage.setItem(LS_DIR_KEY, '1');
+    return true;
+  } catch(e) { return false; }
+}
+
+// ── FS: read/write helpers ────────────────────────────────────────────────────
+async function getDirForAudio(audioName, create) {
+  if (!stampitDir) return null;
+  try {
+    const sub = audioBaseName(audioName) || 'untitled';
+    return await stampitDir.getDirectoryHandle(sub, { create: create || false });
+  } catch(e) { return null; }
+}
+
+async function fsReadSessions(audioName) {
+  const dir = await getDirForAudio(audioName, false);
+  if (!dir) return [];
+  const sessions = [];
+  for await (const [name, handle] of dir.entries()) {
+    if (!name.endsWith('.json')) continue;
+    try {
+      const file = await handle.getFile();
+      const data = JSON.parse(await file.text());
+      sessions.push(data);
+    } catch(e) {}
+  }
+  return sessions.sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
+}
+
+async function fsWriteSession(session) {
+  const dir = await getDirForAudio(session.audioName, true);
+  if (!dir) return false;
+  try {
+    const fh = await dir.getFileHandle(sessionFileName(session), { create: true });
+    const w  = await fh.createWritable();
+    await w.write(JSON.stringify(session));
+    await w.close();
+    return true;
+  } catch(e) { return false; }
+}
+
+async function fsDeleteSession(session) {
+  const dir = await getDirForAudio(session.audioName, false);
+  if (!dir) return;
+  try { await dir.removeEntry(sessionFileName(session)); } catch(e) {}
+}
+
+async function fsReadAllSessions() {
+  if (!stampitDir) return [];
+  const all = [];
+  for await (const [name, handle] of stampitDir.entries()) {
+    if (handle.kind !== 'directory') continue;
+    for await (const [fname, fh] of handle.entries()) {
+      if (!fname.endsWith('.json')) continue;
+      try {
+        const file = await fh.getFile();
+        all.push(JSON.parse(await file.text()));
+      } catch(e) {}
+    }
+  }
+  return all.sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
+}
+
+// ── localStorage fallback ─────────────────────────────────────────────────────
+function lsGetSessions() {
+  try { return JSON.parse(localStorage.getItem(SESSIONS_KEY)) || []; } catch(e) { return []; }
+}
+function lsSaveSessions(sessions) {
+  try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions)); } catch(e) {}
+}
+function lsGetForAudio(audioName) {
+  return lsGetSessions().filter(s => s.audioName === audioName)
+    .sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
+}
+
+// ── unified save/load/delete ──────────────────────────────────────────────────
+async function persistSession(session, html) {
+  const data = { ...session, html, savedAt: new Date().toISOString() };
+  if (stampitDir) {
+    await fsWriteSession(data);
+  } else {
+    const all = lsGetSessions();
+    const idx = all.findIndex(s => s.id === data.id);
+    if (idx >= 0) all[idx] = data; else all.push(data);
+    // cap per audio
+    const audio_name = data.audioName;
+    const forAudio = all.filter(s => s.audioName === audio_name)
+      .sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
+    if (forAudio.length > MAX_SESSIONS) {
+      const toDrop = forAudio.slice(MAX_SESSIONS).map(s => s.id);
+      lsSaveSessions(all.filter(s => !toDrop.includes(s.id)));
+    } else {
+      lsSaveSessions(all);
+    }
+  }
+  return data;
+}
+
+async function removeSavedSession(session) {
+  if (stampitDir) { await fsDeleteSession(session); }
+  else { lsSaveSessions(lsGetSessions().filter(s => s.id !== session.id)); }
+}
+
+async function getSessionsForAudio(audioName) {
+  return stampitDir ? await fsReadSessions(audioName) : lsGetForAudio(audioName);
+}
+
+async function getAllSessions() {
+  return stampitDir ? await fsReadAllSessions() : lsGetSessions().sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
+}
+
+// ── auto-save ─────────────────────────────────────────────────────────────────
+function scheduleAutosave() {
+  if (!autosaveOn) return;
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(async () => {
+    try {
+      if (!currentSession) {
+        const id        = genId();
+        const audioName = fileNameEl.textContent !== 'no file loaded' ? fileNameEl.textContent : '';
+        currentSession  = { id, audioName, label: '', savedAt: new Date().toISOString() };
+      }
+      await persistSession(currentSession, editor.innerHTML);
+      isDirty = false;
+      autosaveDot.classList.add('saved');
+      setTimeout(() => autosaveDot.classList.remove('saved'), 1500);
+    } catch(e) {}
+  }, 2000);
+}
+
+autosaveTgl.addEventListener('click', function() {
+  autosaveOn = !autosaveOn;
+  this.classList.toggle('on', autosaveOn);
+  autosaveDot.style.display = autosaveOn ? '' : 'none';
+});
+
+// ── setup FS on first use ─────────────────────────────────────────────────────
+async function setupFs() {
+  if (!FS_SUPPORTED) return;
+  const ok = await requestDir();
+  if (ok) {
+    setFsStatus(true);
+  }
+}
+function setFsStatus(active) {
+  const el = document.getElementById('fs-status');
+  if (!el) return;
+  el.textContent = active ? 'saving to disk' : 'saving to browser';
+  el.style.color = active ? 'var(--accent)' : 'var(--text-muted)';
+}
+
+// ── session modal ─────────────────────────────────────────────────────────────
+const modalOverlay = document.getElementById('modal-overlay');
+const modalTitle   = document.getElementById('modal-title');
+const modalSub     = document.getElementById('modal-sub');
+const modalList    = document.getElementById('modal-list');
+
+function openModal(title, sub, items) {
+  modalTitle.textContent = title;
+  modalSub.textContent   = sub;
+  modalList.innerHTML    = '';
+  items.forEach(item => modalList.appendChild(item));
+  modalOverlay.classList.add('open');
+}
+function closeModal() { modalOverlay.classList.remove('open'); }
+
+document.getElementById('modal-cancel').addEventListener('click', closeModal);
+modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) closeModal(); });
+
+function loadSession(session) {
+  currentSession = { id: session.id, audioName: session.audioName, label: session.label || '', savedAt: session.savedAt };
+  editor.innerHTML = session.html || '';
+  editor.querySelectorAll('.ts').forEach(attachTs);
+  updateStats();
+  isDirty = false;
+  closeModal();
+  editor.focus();
+}
+
+function makeSessionItem(session, onLoad, onDelete) {
+  const row = document.createElement('div');
+  row.className = 'session-item';
+
+  // label (editable)
+  const info = document.createElement('div');
+  info.style.cssText = 'flex:1;cursor:pointer;min-width:0';
+
+  const labelEl = document.createElement('div');
+  labelEl.className = 'session-date';
+  labelEl.contentEditable = 'true';
+  labelEl.spellcheck = false;
+  labelEl.style.cssText = 'outline:none;cursor:text';
+  labelEl.textContent = session.label || fmtDate(session.savedAt);
+  labelEl.title = 'click to rename';
+  // save label on blur
+  labelEl.addEventListener('blur', async () => {
+    const newLabel = labelEl.textContent.trim();
+    session.label = newLabel;
+    if (currentSession && currentSession.id === session.id) currentSession.label = newLabel;
+    await persistSession(session, session.html || '');
+  });
+  labelEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); labelEl.blur(); }
+    e.stopPropagation();
+  });
+  // click on label = edit; click on row outside label = load
+  labelEl.addEventListener('click', e => e.stopPropagation());
+
+  const meta = document.createElement('div');
+  meta.className = 'session-meta';
+  meta.textContent = wordCount(session.html) + ' words · ' + fmtDate(session.savedAt);
+
+  info.appendChild(labelEl); info.appendChild(meta);
+  info.addEventListener('click', () => onLoad(session));
+
+  const del = document.createElement('button');
+  del.className = 'session-del';
+  del.title = 'delete session';
+  del.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+  del.addEventListener('click', async e => {
+    e.stopPropagation();
+    await removeSavedSession(session);
+    if (currentSession && currentSession.id === session.id) currentSession = null;
+    row.remove();
+    const remaining = modalList.querySelectorAll('.session-item:not(.new-session)').length;
+    modalSub.textContent = remaining + ' saved session' + (remaining !== 1 ? 's' : '');
+  });
+
+  row.appendChild(info); row.appendChild(del);
+  return row;
+}
+
+function makeNewSessionItem(onNew) {
+  const row = document.createElement('div');
+  row.className = 'session-item new-session';
+  row.style.cssText = 'color:var(--accent);font-size:13px;font-family:var(--font-editor)';
+  row.textContent = '+ start new session';
+  row.addEventListener('click', () => onNew());
+  return row;
+}
+
+async function showSessionsForAudio(audioName, onNew) {
+  const all = await getSessionsForAudio(audioName);
+  const items = all.map(s => makeSessionItem(s, session => loadSession(session)));
+  items.push(makeNewSessionItem(onNew));
+  openModal(
+    audioName,
+    all.length + ' saved session' + (all.length !== 1 ? 's' : ''),
+    items
+  );
+}
+
+async function showAllSessions() {
+  const all = await getAllSessions();
+  if (!all.length) { openModal('Sessions', 'no saved sessions yet', []); return; }
+  const groups = {};
+  all.forEach(s => {
+    const k = s.audioName || 'untitled';
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(s);
+  });
+  const items = [];
+  Object.entries(groups).forEach(([name, sessions]) => {
+    const header = document.createElement('div');
+    header.style.cssText = 'padding:8px 20px 4px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);font-family:var(--font-editor)';
+    header.textContent = name;
+    items.push(header);
+    sessions.forEach(s => items.push(makeSessionItem(s, session => loadSession(session))));
+  });
+  openModal('All Sessions', all.length + ' total', items);
+}
+
+document.getElementById('open-sessions-btn').addEventListener('click', () => {
+  closeSidebar();
+  showAllSessions();
+});
+
+// ── export ────────────────────────────────────────────────────────────────────
+exportBtn.addEventListener('click', () => {
+  const blob = new Blob([editor.innerText], { type:'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = fileNameEl.textContent !== 'no file loaded'
+    ? fileNameEl.textContent.replace(/\.[^.]+$/, '') + '_transcript.txt'
+    : 'transcript.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+  closeSidebar();
+});
+
+// ── stats ─────────────────────────────────────────────────────────────────────
+function updateStats() {
+  const text = editor.innerText.trim();
+  wordCountEl.textContent = text.length === 0 ? 0 : text.split(/\s+/).filter(Boolean).length;
+  lineCountEl.textContent = text.length === 0 ? 0 : text.split('\n').filter(l => l.trim()).length;
+}
+
+// ── caret helpers ─────────────────────────────────────────────────────────────
+function getCaretOffset() {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return 0;
+  const r = sel.getRangeAt(0).cloneRange();
+  r.selectNodeContents(editor);
+  r.setEnd(sel.getRangeAt(0).endContainer, sel.getRangeAt(0).endOffset);
+  return r.toString().length;
+}
+function setCaretOffset(offset) {
+  const sel = window.getSelection();
+  let rem = offset;
+  const walk = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walk.nextNode())) {
+    if (rem <= node.textContent.length) {
+      const r = document.createRange();
+      r.setStart(node, rem); r.collapse(true);
+      sel.removeAllRanges(); sel.addRange(r); return;
+    }
+    rem -= node.textContent.length;
+  }
+}
+function replaceTextSlice(from, to, rep) {
+  const nodes = [];
+  let pos = 0;
+  let walk = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walk.nextNode())) { nodes.push({node, start:pos, end:pos+node.textContent.length}); pos += node.textContent.length; }
+  for (let i = nodes.length-1; i >= 0; i--) {
+    const {node:n, start, end} = nodes[i];
+    const oS = Math.max(from,start), oE = Math.min(to,end);
+    if (oS < oE) n.textContent = n.textContent.slice(0,oS-start) + n.textContent.slice(oE-start);
+  }
+  if (!rep.length) return;
+  pos = 0;
+  walk = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+  while ((node = walk.nextNode())) {
+    const len = node.textContent.length;
+    if (from >= pos && from <= pos+len) {
+      const lo = from-pos;
+      node.textContent = node.textContent.slice(0,lo) + rep + node.textContent.slice(lo);
+      return;
+    }
+    pos += len;
+  }
+  editor.appendChild(document.createTextNode(rep));
+}
+
+// ── timestamp spans ───────────────────────────────────────────────────────────
+function flash(el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+function placeAfter(span) {
+  const r = document.createRange(); r.setStartAfter(span); r.collapse(true);
+  const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+}
+function commitTs(span) {
+  const val = span.textContent.trim();
+  const ok  = /^\[\d{2}:\d{2}:\d{2}\.\d{2}\]$/.test(val) && parseTime(val) !== null;
+  span.classList.toggle('error', !ok);
+  if (ok) { span.contentEditable='false'; activeTs=null; }
+  return ok;
+}
+function activateTs(span) {
+  if (activeTs && activeTs !== span) commitTs(activeTs);
+  activeTs = span; span.contentEditable='true'; span.classList.remove('error');
+  const t = parseTime(span.textContent);
+  if (t !== null) audio.currentTime = t;
+  requestAnimationFrame(() => {
+    span.focus();
+    const r = document.createRange(); r.selectNodeContents(span); r.collapse(false);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  });
+}
+function attachTs(span) {
+  span.addEventListener('click', e => {
+    e.stopPropagation();
+    if (span.contentEditable === 'true') return;
+    const t = parseTime(span.textContent);
+    if (t !== null) { audio.currentTime = t; flash(tsDisplay); }
+    activateTs(span);
+  });
+  span.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); span.contentEditable='false'; span.classList.remove('error'); activeTs=null; editor.focus(); return; }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      if (e.key === 'Tab') togglePlay();
+      if (commitTs(span)) { editor.focus(); placeAfter(span); }
+      return;
+    }
+    if (e.ctrlKey && (e.key === ' ' || e.code === 'Space')) { e.preventDefault(); if (commitTs(span)) { editor.focus(); insertTimestamp(); } }
+  });
+  span.addEventListener('blur', () => { if (span.contentEditable==='true') { if (commitTs(span)) { span.contentEditable='false'; activeTs=null; } } });
+  span.addEventListener('beforeinput', e => { if (e.inputType==='insertFromPaste'||e.inputType==='insertFromDrop') e.preventDefault(); });
+}
+function makeTs(text) {
+  const span = document.createElement('span');
+  span.className='ts'; span.contentEditable='false'; span.textContent=text;
+  attachTs(span); return span;
+}
+function insertTimestamp() {
+  const ts  = formatTime(audio.currentTime);
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !editor.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+    const span = makeTs(ts); editor.appendChild(span); editor.appendChild(document.createTextNode('')); placeAfter(span);
+  } else {
+    const r = sel.getRangeAt(0); r.deleteContents();
+    const span = makeTs(ts); r.insertNode(span);
+    r.setStartAfter(span); r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
+  }
+  flash(tsDisplay);
+}
+
+// ── slash command palette ─────────────────────────────────────────────────────
+let paletteItems  = Array.from(slashPalette.querySelectorAll('.sp-item'));
+let paletteActive = -1;
+
+function openPalette(rect) {
+  // rect is captured synchronously at keydown — never read selection here
+  if (!rect) return;
+  slashPalette.classList.add('open');
+  paletteActive = -1;
+  paletteItems.forEach(i => i.classList.remove('active'));
+  // position: prefer above, fall back to below if not enough room
+  const ph = slashPalette.offsetHeight;
+  const spaceAbove = rect.top;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const left = Math.min(rect.left, window.innerWidth - 220);
+  if (spaceAbove >= ph + 8 || spaceAbove >= spaceBelow) {
+    slashPalette.style.top  = (rect.top - ph - 8) + 'px';
+  } else {
+    slashPalette.style.top  = (rect.bottom + 8) + 'px';
+  }
+  slashPalette.style.left = left + 'px';
+}
+function closePalette() { slashPalette.classList.remove('open'); sl.active=false; sl.buffer=''; paletteActive=-1; }
+
+function commitSlash(tag) {
+  // only the '/' was inserted in DOM — buffer chars were all preventDefault'd
+  const caretNow = getCaretOffset();
+  replaceTextSlice(caretNow - 1, caretNow, tag + ' ');
+  setCaretOffset(caretNow - 1 + tag.length + 1);
+  closePalette();
+}
+
+paletteItems.forEach(item => {
+  item.addEventListener('mousedown', e => {
+    e.preventDefault();
+    commitSlash(item.dataset.tag);
+    editor.focus();
+  });
+});
+
+// ── EN tag machine ────────────────────────────────────────────────────────────
+function resetEn() { en.active=false; en.buffer=''; en.justConverted=false; en.revertPhrase=''; en.revertCaretEnd=0; }
+function convertEN() {
+  const phrase = en.buffer;
+  const caretNow = getCaretOffset();
+  const matchStart = caretNow - (1 + phrase.length);
+  const rep = '[EN]' + phrase + '[/EN]';
+  replaceTextSlice(matchStart, caretNow, rep);
+  const newCaret = matchStart + rep.length;
+  setCaretOffset(newCaret);
+  en.revertPhrase=phrase; en.revertCaretEnd=newCaret;
+  en.active=false; en.buffer=''; en.justConverted=true;
+}
+function revertEN() {
+  const converted = '[EN]' + en.revertPhrase + '[/EN]';
+  const matchStart = en.revertCaretEnd - converted.length;
+  const reverted   = '`' + en.revertPhrase;
+  replaceTextSlice(matchStart, en.revertCaretEnd, reverted);
+  setCaretOffset(matchStart + reverted.length);
+  en.active=true; en.buffer=en.revertPhrase;
+  en.justConverted=false; en.revertPhrase=''; en.revertCaretEnd=0;
+}
+
+// ── find & replace ────────────────────────────────────────────────────────────
+let fnrMatches = [], fnrIdx = 0;
+
+function openFnr() {
+  fnrBar.classList.add('open');
+  fnrFind.focus();
+  fnrFind.select();
+  closeSidebar();
+}
+function closeFnr() {
+  fnrBar.classList.remove('open');
+  clearHighlights();
+  editor.focus();
+}
+
+document.getElementById('fnr-open-btn').addEventListener('click', () => { openFnr(); });
+document.getElementById('fnr-close').addEventListener('click', closeFnr);
+
+function clearHighlights() {
+  // remove all mark spans, replace with text
+  editor.querySelectorAll('mark.fnr-hl').forEach(m => {
+    const txt = document.createTextNode(m.textContent);
+    m.replaceWith(txt);
+  });
+  editor.normalize();
+  fnrMatches = []; fnrIdx = 0; fnrStatus.textContent = '';
+}
+
+function runFind() {
+  clearHighlights();
+  const q = fnrFind.value;
+  if (!q) return;
+  const text = editor.innerHTML;
+  // work on plain text nodes only — highlight via TreeWalker
+  const walk = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+  const hits = [];
+  let node;
+  while ((node = walk.nextNode())) {
+    if (node.parentElement.classList.contains('ts')) continue; // skip ts spans
+    let idx = 0, content = node.textContent;
+    const lower = content.toLowerCase(), ql = q.toLowerCase();
+    while ((idx = lower.indexOf(ql, idx)) !== -1) {
+      hits.push({ node, start: idx, end: idx + q.length });
+      idx += q.length;
+    }
+  }
+  // highlight in reverse so offsets stay valid
+  for (let i = hits.length - 1; i >= 0; i--) {
+    const { node, start, end } = hits[i];
+    const before = node.textContent.slice(0, start);
+    const match  = node.textContent.slice(start, end);
+    const after  = node.textContent.slice(end);
+    const mark   = document.createElement('mark');
+    mark.className = 'fnr-hl';
+    mark.style.cssText = 'background:var(--accent-dim);color:var(--accent);border-radius:2px';
+    mark.textContent = match;
+    const afterNode = document.createTextNode(after);
+    node.textContent = before;
+    node.parentNode.insertBefore(afterNode, node.nextSibling);
+    node.parentNode.insertBefore(mark, afterNode);
+    hits[i].mark = mark;
+  }
+  fnrMatches = editor.querySelectorAll('mark.fnr-hl');
+  fnrIdx = 0;
+  fnrStatus.textContent = fnrMatches.length ? '1 / ' + fnrMatches.length : 'no results';
+  if (fnrMatches.length) scrollToMatch(0);
+}
+
+function scrollToMatch(i) {
+  fnrMatches.forEach((m,j) => m.style.background = j===i ? 'color-mix(in srgb,var(--accent) 30%,transparent)' : 'var(--accent-dim)');
+  if (fnrMatches[i]) fnrMatches[i].scrollIntoView({ block:'center' });
+  fnrStatus.textContent = (i+1) + ' / ' + fnrMatches.length;
+}
+
+document.getElementById('fnr-prev').addEventListener('click', () => {
+  if (!fnrMatches.length) { runFind(); return; }
+  fnrIdx = (fnrIdx - 1 + fnrMatches.length) % fnrMatches.length;
+  scrollToMatch(fnrIdx);
+});
+document.getElementById('fnr-next').addEventListener('click', () => {
+  if (!fnrMatches.length) { runFind(); return; }
+  fnrIdx = (fnrIdx + 1) % fnrMatches.length;
+  scrollToMatch(fnrIdx);
+});
+fnrFind.addEventListener('input', runFind);
+fnrFind.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); fnrIdx = (fnrIdx+1) % Math.max(fnrMatches.length,1); if (fnrMatches.length) scrollToMatch(fnrIdx); }
+  if (e.key === 'Escape') closeFnr();
+});
+fnrReplace.addEventListener('keydown', e => { if (e.key === 'Escape') closeFnr(); });
+
+document.getElementById('fnr-replace-one').addEventListener('click', () => {
+  if (!fnrMatches.length) return;
+  const m = fnrMatches[fnrIdx];
+  if (!m) return;
+  m.replaceWith(document.createTextNode(fnrReplace.value));
+  editor.normalize();
+  runFind();
+});
+document.getElementById('fnr-replace-all').addEventListener('click', () => {
+  if (!fnrMatches.length) { runFind(); }
+  const rep = fnrReplace.value;
+  fnrMatches.forEach(m => m.replaceWith(document.createTextNode(rep)));
+  editor.normalize();
+  fnrMatches = []; fnrStatus.textContent = 'replaced';
+  updateStats(); scheduleAutosave();
+});
+
+// ── editor keydown ────────────────────────────────────────────────────────────
+editor.addEventListener('keydown', function(e) {
+
+  // Tab = play/pause
+  if (e.key === 'Tab') { e.preventDefault(); togglePlay(); return; }
+
+  // Ctrl+Space = insert timestamp
+  if (e.ctrlKey && (e.key === ' ' || e.code === 'Space')) {
+    e.preventDefault(); e.stopImmediatePropagation();
+    insertTimestamp(); resetEn(); closePalette(); return;
+  }
+
+  // Ctrl+- = rewind
+  if (e.ctrlKey && (e.key === '-' || e.key === '_')) { e.preventDefault(); rewind(); return; }
+
+  // Ctrl+H = find & replace
+  if (e.ctrlKey && e.key === 'h') { e.preventDefault(); openFnr(); return; }
+
+  // Escape = close palette or find bar
+  if (e.key === 'Escape') {
+    if (sl.active) { closePalette(); return; }
+    if (fnrBar.classList.contains('open')) { closeFnr(); return; }
+  }
+
+  // palette navigation
+  if (sl.active && slashPalette.classList.contains('open')) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      paletteActive = (paletteActive + 1) % paletteItems.length;
+      paletteItems.forEach((i,j) => i.classList.toggle('active', j===paletteActive));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      paletteActive = (paletteActive - 1 + paletteItems.length) % paletteItems.length;
+      paletteItems.forEach((i,j) => i.classList.toggle('active', j===paletteActive));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (paletteActive >= 0) commitSlash(paletteItems[paletteActive].dataset.tag);
+      else closePalette();
+      return;
+    }
+  }
+
+  // EN machine: immediate backspace revert
+  if (e.key === 'Backspace' && en.justConverted) { e.preventDefault(); revertEN(); return; }
+  if (en.justConverted && e.key !== 'Backspace') { en.justConverted=false; en.revertPhrase=''; en.revertCaretEnd=0; }
+
+  // EN machine: backtick
+  if (e.key === '`' && !e.ctrlKey && !e.metaKey) {
+    if (!en.active) { en.active=true; en.buffer=''; }
+    else { if (en.buffer.length > 0) { e.preventDefault(); convertEN(); } else resetEn(); }
+    return;
+  }
+  if (en.active) {
+    if (e.key === 'Backspace') { en.buffer.length > 0 ? en.buffer=en.buffer.slice(0,-1) : resetEn(); return; }
+    if (e.key === 'Enter' || e.key === 'Escape') { resetEn(); return; }
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) en.buffer += e.key;
+  }
+
+  // slash machine
+  if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+    sl.active = true; sl.buffer = '';
+    // capture caret rect now, synchronously, before anything moves
+    const sel = window.getSelection();
+    sl.caretRect = (sel && sel.rangeCount) ? sel.getRangeAt(0).getBoundingClientRect() : null;
+    openPalette(sl.caretRect);
+    return;
+  }
+  if (sl.active) {
+    if (e.key === 'Backspace') {
+      if (sl.buffer.length > 0) { sl.buffer = sl.buffer.slice(0,-1); }
+      else { closePalette(); }
+      return;
+    }
+    if (e.key === 'Enter') { return; } // handled above
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault(); // prevent ALL buffer chars from entering DOM
+      sl.buffer += e.key;
+      // direct match — commit immediately
+      const tag = SLASH_MAP[sl.buffer];
+      if (tag) { commitSlash(tag); return; }
+      // no match possible — close palette, let char type normally
+      if (![...Object.keys(SLASH_MAP)].some(k => k.startsWith(sl.buffer))) {
+        closePalette();
+        // re-insert the typed char since we preventDefault'd it
+        document.execCommand('insertText', false, e.key);
+      }
+    }
+  }
+});
+
+editor.addEventListener('click', () => {
+  if (sl.active) closePalette();
+  if (activeTs) { commitTs(activeTs); if (!activeTs.classList.contains('error')) { activeTs.contentEditable='false'; activeTs=null; } }
+});
+editor.addEventListener('input', () => { updateStats(); scheduleAutosave(); });
+
+// ── new session button ────────────────────────────────────────────────────────
+document.getElementById('new-session-btn').addEventListener('click', () => {
+  if (isDirty && editor.innerText.trim().length > 0) {
+    if (!confirm('You have unsaved changes. Start a new session anyway?')) return;
+  }
+  currentSession = null;
+  editor.innerHTML = '';
+  isDirty = false;
+  updateStats();
+  closeSidebar();
+  editor.focus();
+});
+
+// ── connect folder button ─────────────────────────────────────────────────────
+const connectBtn = document.getElementById('connect-fs-btn');
+if (FS_SUPPORTED) {
+  connectBtn.style.display = '';
+  connectBtn.addEventListener('click', async () => {
+    const ok = await requestDir();
+    if (ok) { setFsStatus(true); closeSidebar(); }
+  });
+} else {
+  setFsStatus(false);
+}
+
+// ── dirty tracking ────────────────────────────────────────────────────────────
+editor.addEventListener('input', () => { isDirty = true; });
+
+// ── init ──────────────────────────────────────────────────────────────────────
+updateDisplay();
+editor.focus();
+</script>
+</body>
+</html>
